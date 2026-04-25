@@ -1,0 +1,41 @@
+id: cr-403-outdated-deps
+name: Public API services must not depend on outdated packages
+description: >
+  Services that expose public API endpoints (via APIInterface) have a higher
+  security and reliability responsibility. If any of their dependencies have
+  a known newer version available, they must be updated promptly.
+  This is a topology-aware policy: it cross-references service exposure
+  (via APIEndpoint) with dependency currency (via Package + Release data).
+  This kind of cross-entity policy is uniquely enabled by the CodeRadius graph —
+  it cannot be expressed as a file-level linting rule.
+severity: warning
+scope: service
+failFast: false
+tags:
+  - security
+  - dependencies
+  - topology
+
+query: |
+  // Find services that expose at least one HTTP API endpoint
+  MATCH (s:Service)-[:EXPOSES_API]->(ai:APIInterface)-[:HAS_ENDPOINT]->(e:APIEndpoint)
+
+  // Find packages they depend on that have a known latest version
+  // (latestKnownVersion is populated by the ingestion from package.json + git tags)
+  MATCH (s)-[:DEPENDS_ON]->(p:Package)
+  WHERE p.latestKnownVersion IS NOT NULL
+    AND p.isInternal = false
+
+  // Collect the outdated dependency names
+  WITH s, collect(DISTINCT p.name + '@' + coalesce(p.latestKnownVersion, '?')) AS outdatedDeps
+  WHERE size(outdatedDeps) > 0
+
+  // Get the owning team for alert routing
+  OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
+
+  RETURN
+    s.id      AS entityId,
+    s.name    AS entityName,
+    'service' AS entityType,
+    'Public API service has ' + toString(size(outdatedDeps)) + ' package(s) with newer versions available: ' +
+    reduce(a = '', d IN outdatedDeps | a + d + ', ') AS detail

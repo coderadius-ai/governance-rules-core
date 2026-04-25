@@ -1,0 +1,23 @@
+id: cr-303-agents-md
+name: AGENTS.md present — AI agent onboarding documentation
+description: >
+  AGENTS.md is the file that AI agents (Devin, Copilot, Cursor, etc.) read
+  before operating on any repository file. It contains code conventions, local
+  architecture, test commands, and service-specific operational instructions.
+  Without AGENTS.md, every AI agent session starts without context — increasing
+  the risk of incorrect architectural decisions and silent regressions.
+severity: error
+scope: repository
+tags: [developer-experience, ai-readiness, documentation]
+query: |
+  MATCH (r:Repository)
+  OPTIONAL MATCH (r)-[:HAS_AGENTIC_CONFIG]->(ac:AgenticConfig)
+    WHERE ac.configType IN ['subagents_config', 'agent_instructions']
+      AND ac.tool = 'generic'
+  WITH r, ac
+  WHERE ac IS NULL
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'AGENTS.md missing — AI agents have no technical specifications for operating on this repository' AS detail

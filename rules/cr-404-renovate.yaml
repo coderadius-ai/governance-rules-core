@@ -1,0 +1,26 @@
+id: cr-404-renovate
+name: Renovate configured for automated dependency updates
+description: >
+  Renovate ensures dependencies are automatically updated with dedicated PRs.
+  Without it, outdated libraries become a silent security risk and cause
+  incompatibilities when AI agents or developers update application code.
+severity: warning
+scope: repository
+tags: [security, dependencies, automation]
+query: |
+  MATCH (r:Repository)
+  OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
+    WHERE sf.path IN [
+      'renovate.json',
+      'renovate.json5',
+      '.renovaterc',
+      '.renovaterc.json',
+      '.github/renovate.json'
+    ]
+  WITH r, sf
+  WHERE sf IS NULL
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'renovate.json missing — dependencies are not automatically updated' AS detail

@@ -1,0 +1,37 @@
+id: cr-301-makefile-targets
+name: Makefile mandatory targets
+description: >
+  Every repository must define the mandatory Makefile targets:
+  'setup', 'test', and 'run'. These targets standardize developer workflows
+  and enable consistent CI/CD pipelines.
+severity: error
+scope: repository
+failFast: false
+tags:
+  - developer-experience
+  - makefile
+
+query: |
+  MATCH (r:Repository)
+  // Path 1: Tasks directly on the Repository
+  OPTIONAL MATCH (r)-[:HAS_TASK]->(t1:Task)
+  WHERE t1.source = 'makefile'
+  // Path 2: Tasks on Services within the Repository (monorepo)
+  OPTIONAL MATCH (svc:Service)-[:STORED_IN]->(r)
+  OPTIONAL MATCH (svc)-[:HAS_TASK]->(t2:Task)
+  WHERE t2.source = 'makefile'
+  WITH r, collect(DISTINCT t1.name) + collect(DISTINCT t2.name) AS rawTargets
+  WITH r, [x IN rawTargets WHERE x IS NOT NULL] AS targets
+  WITH r, targets,
+       [x IN ['setup', 'test', 'run'] | {
+         label: x,
+         status: CASE WHEN x IN targets THEN 'pass' ELSE 'fail' END
+       }] AS checks,
+       [x IN ['setup', 'test', 'run'] WHERE NOT x IN targets] AS missingTargets
+  WHERE size(missingTargets) > 0
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'Missing mandatory Makefile targets: ' + reduce(a = '', x IN missingTargets | a + x + ' ') AS detail,
+    { checks: checks, found: targets } AS structuredDetail

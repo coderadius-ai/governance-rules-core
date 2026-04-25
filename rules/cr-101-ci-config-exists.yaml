@@ -1,0 +1,28 @@
+id: cr-101-ci-config-exists
+name: Every active repository must have a CI/CD configuration file
+description: >
+  Ensures all active repositories maintain a CI/CD pipeline configuration file (GitLab CI or GitHub Actions). 
+  Standardizing automated verification is critical for delivery velocity and architectural governance. 
+  Repositories without CI/CD definitions are considered non-compliant with organizational DevOps standards.
+severity: error
+scope: repository
+failFast: false
+tags:
+  - ci-cd
+  - compliance
+  - golden-path
+query: |
+  MATCH (r:Repository)
+  WHERE r.livenessLevel IN ['elite', 'high', 'medium']
+  // Path 1: CI config directly on the Repository
+  OPTIONAL MATCH (r)-[:DEFINES]->(ci1:CIPipeline)
+  // Path 2: CI config on a Service within the Repository (monorepo)
+  OPTIONAL MATCH (svc:Service)-[:STORED_IN]->(r)
+  OPTIONAL MATCH (svc)-[:DEFINES]->(ci2:CIPipeline)
+  WITH r, count(ci1) + count(ci2) AS ciFiles
+  WHERE ciFiles = 0
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'No CI/CD configuration file found. Add a pipeline configuration.' AS detail

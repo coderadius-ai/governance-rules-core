@@ -1,0 +1,20 @@
+id: cr-502-backstage-catalog
+name: Backstage catalog-info.yaml required
+description: >
+  Every repository must register in the Backstage Software Catalog via a
+  catalog-info.yaml file. Without this file, AI agents and platform tools
+  have no visibility into service topology before operating on the codebase.
+severity: error
+scope: repository
+tags: [service-catalog, ai-readiness, backstage]
+query: |
+  MATCH (r:Repository)
+  OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
+    WHERE sf.path IN ['catalog-info.yaml', 'catalog.yaml', 'catalog-info.yml', 'catalog.yml']
+  WITH r, sf
+  WHERE sf IS NULL
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'catalog-info.yaml missing — service is not registered in the Backstage Software Catalog' AS detail

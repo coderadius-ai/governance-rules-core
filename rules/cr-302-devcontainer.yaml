@@ -1,0 +1,21 @@
+id: cr-302-devcontainer
+name: DevContainer configured for standardized development environments
+description: >
+  A devcontainer.json ensures that AI agents and human developers operate in
+  the same reproducible environment. Eliminates "works on my machine" issues
+  and allows AI agents to bootstrap a correct development environment
+  autonomously without manual instructions.
+severity: info
+scope: repository
+tags: [developer-experience, ai-readiness, environment]
+query: |
+  MATCH (r:Repository)
+  OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
+    WHERE sf.path IN ['.devcontainer/devcontainer.json', '.devcontainer.json']
+  WITH r, sf
+  WHERE sf IS NULL
+  RETURN
+    r.id         AS entityId,
+    r.name       AS entityName,
+    'repository' AS entityType,
+    'devcontainer.json missing — development environment not standardized for AI agents' AS detail
