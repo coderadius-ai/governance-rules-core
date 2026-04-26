@@ -9,17 +9,6 @@ description: >
   it cross-references PUBLIC SERVICE EXPOSURE (via APIEndpoint) with PACKAGE
   HEALTH (via Release.deprecated=true). This is impossible to express as a
   file-level lint rule.
-
-  Why NOT "packages with a newer version available":
-    The DEPENDS_ON relationship stores requiredVersion (e.g. ^18.0.0) as a
-    semver range. Comparing this reliably against latestKnownVersion requires
-    semver range resolution which Cypher cannot perform natively. Using only
-    latestKnownVersion IS NOT NULL would flag every service using ANY external
-    package that was ever published (false positive for all packages).
-    Release.deprecated=true is definitive data — it means the publisher has
-    explicitly marked that version as deprecated via the registry.
-
-  Data populated by: package publisher plugin + git tag scanner.
 severity: warning
 scope: service
 failFast: false
@@ -33,24 +22,24 @@ query: |
   MATCH (s:Service)-[:EXPOSES_API]->(ai:APIInterface)-[:HAS_ENDPOINT]->(e:APIEndpoint)
 
   // Find external packages they depend on that have explicitly deprecated releases.
-  // Release.deprecated=true means the publisher marked this version as abandoned/unsafe.
-  // This is definitive data unlike latestKnownVersion which cannot be compared
-  // to a semver range without runtime resolution.
-  MATCH (s)-[dep:DEPENDS_ON]->(p:Package)-[:HAS_RELEASE]->(rel:Release)
+  OPTIONAL MATCH (s)-[dep:DEPENDS_ON]->(p:Package)-[:HAS_RELEASE]->(rel:Release)
   WHERE rel.deprecated = true
     AND p.isInternal = false
 
-  // Collect all deprecated package@version pairs for the violation message
-  WITH s, collect(DISTINCT p.name + '@' + rel.version) AS deprecatedDeps
-  WHERE size(deprecatedDeps) > 0
+  // Collect all deprecated package@version pairs
+  WITH s, collect(DISTINCT CASE WHEN rel IS NOT NULL THEN p.name + '@' + rel.version ELSE null END) AS rawDeps
+  WITH s, [d IN rawDeps WHERE d IS NOT NULL] AS deprecatedDeps
 
-  // Get the owning team for alert routing (optional — services may be unowned)
+  // Get the owning team for alert routing (optional)
   OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
 
   RETURN
     s.id      AS entityId,
     s.name    AS entityName,
     'service' AS entityType,
-    'Public API service depends on ' + toString(size(deprecatedDeps)) +
-    ' explicitly deprecated package(s): ' +
-    reduce(a = '', d IN deprecatedDeps | a + d + ', ') AS detail
+    CASE WHEN size(deprecatedDeps) = 0 THEN 'pass' ELSE 'fail' END AS status,
+    CASE WHEN size(deprecatedDeps) = 0 THEN ''
+    ELSE 'Public API service depends on ' + toString(size(deprecatedDeps)) +
+         ' explicitly deprecated package(s): ' +
+         reduce(a = '', d IN deprecatedDeps | a + d + ', ')
+    END AS detail

@@ -2,7 +2,7 @@ id: cr-501-team-ownership
 name: All services must have a declared team owner
 description: >
   Every Service in the architecture graph must be owned by at least one Team.
-  Unowned services are infrastructure debt — they lack a clear on-call contact,
+  Unowned services are infrastructure debt - they lack a clear on-call contact,
   complicate incident response, and indicate incomplete catalog coverage.
 severity: warning
 scope: service
@@ -13,11 +13,11 @@ tags:
 
 query: |
   MATCH (s:Service)
-  WHERE NOT EXISTS {
-    MATCH (t:Team)-[:OWNS]->(s)
-  }
+  OPTIONAL MATCH (t:Team)-[:OWNS]->(s)
+  WITH s, t
   RETURN
     s.id      AS entityId,
     s.name    AS entityName,
     'service' AS entityType,
-    'No team owner declared. Add owner annotation to catalog-info.yaml.' AS detail
+    CASE WHEN t IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN t IS NULL THEN 'No team owner declared. Add owner annotation to catalog-info.yaml.' ELSE '' END AS detail

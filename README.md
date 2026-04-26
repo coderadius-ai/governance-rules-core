@@ -1,7 +1,7 @@
 # Governance Rules Core
 
 Production-tested governance rules for [CodeRadius](https://coderadius.ai).  
-Each rule is a declarative **YAML file** containing a **Cypher query** that enforces an organizational standard against the live architecture graph.
+Each rule is a declarative **YAML file** containing a **Cypher query** that evaluates entities against an organizational standard using the live architecture graph.
 
 > **These are not file-level lint rules.**  
 > They are **topology-level checks** — cross-referencing service exposure, team ownership, dependency health, Docker registries, CI/CD configuration, and AI agent readiness **across the entire architecture graph**.
@@ -16,10 +16,10 @@ The rules cover multiple governance domains:
 
 | Domain | What it enforces |
 |--------|-----------------|
-| **CI/CD Compliance** | Pipeline existence, MR gates, corporate toolkit inclusion |
+| **CI/CD Compliance** | Pipeline existence, MR gates |
 | **Code Quality** | TypeScript strict mode, compiler flag inheritance |
 | **Developer Experience** | Makefile targets, DevContainers, AI agent onboarding |
-| **Security & Supply Chain** | Docker registries, deprecated/outdated dependencies, Renovate |
+| **Security & Supply Chain** | Deprecated/outdated dependencies, Renovate |
 | **Service Catalog** | Backstage registration, team ownership |
 
 ---
@@ -31,6 +31,7 @@ The rules cover multiple governance domains:
 3. **Composable.** Organizations cherry-pick the rules they need. The engine can load multiple rule directories simultaneously.
 4. **Extensible.** Write your own rules following the same YAML + Cypher contract. Place them in the `custom-rules/` directory (which is `.gitignore`d) to avoid committing proprietary, company-specific logic to this core repository.
 5. **Severity-driven.** Each rule declares `error`, `warning`, or `info` — enabling progressive adoption without blocking deployments.
+6. **Compliance-native.** Every rule returns **all in-scope entities** with a `pass` or `fail` status — enabling accurate compliance percentages and per-entity compliance tracking.
 
 ---
 
@@ -52,20 +53,7 @@ Rules are evaluated automatically during `radius policy check` and `radius dashb
 governance-rules-core/
 ├── README.md
 ├── custom-rules/          # Git-ignored folder for proprietary company rules
-│   └── cr-102-my-company-toolkit.yaml
 └── rules/                 # Standard, open-source baseline rules
-    ├── cr-101-ci-config-exists.yaml
-    ├── cr-103-mr-pipeline.yaml
-    ├── cr-201-ts-strictness.yaml
-    ├── cr-301-makefile-targets.yaml
-    ├── cr-302-devcontainer.yaml
-    ├── cr-303-agents-md.yaml
-    ├── cr-401-docker-base-images.yaml
-    ├── cr-402-deprecated-deps.yaml
-    ├── cr-403-outdated-deps.yaml
-    ├── cr-404-renovate.yaml
-    ├── cr-501-team-ownership.yaml
-    └── cr-502-backstage-catalog.yaml
 ```
 
 The engine can load **all `.yaml` files** from multiple directories. Use `custom-rules/` for any company-specific policies (like custom CI toolkits or internal registry checks) to avoid committing them to this core repository.
@@ -80,7 +68,7 @@ The engine can load **all `.yaml` files** from multiple directories. Use `custom
 | `cr-4xx` | Security & Supply Chain |
 | `cr-5xx` | Service Catalog & Ownership |
 
-Each category supports up to 99 rules. New rules simply increment within their range.
+The first digit groups rules by category. While the current convention uses three digits (e.g., `cr-101`), this is just for readability; there is no hard limit on the number of rules per category. Gaps in numbering (e.g., jumping from `cr-101` to `cr-103`) are intentional and indicate deprecated rules.
 
 ---
 
@@ -111,7 +99,6 @@ Each category supports up to 99 rules. New rules simply increment within their r
 
 | ID | Name | Severity | Scope |
 |----|------|----------|-------|
-| `cr-401` | [Docker base image registry](#cr-401--docker-base-image-registry) | `error` | repository |
 | `cr-402` | [Exposed services: deprecated dependencies](#cr-402--exposed-services-deprecated-dependencies) | `warning` | service |
 | `cr-403` | [Exposed services: outdated dependencies](#cr-403--exposed-services-outdated-dependencies) | `warning` | service |
 | `cr-404` | [Renovate configured](#cr-404--renovate-configured) | `warning` | repository |
@@ -136,7 +123,7 @@ All repositories must have a CI/CD pipeline configuration file. Supported: `.git
 
 ### `cr-103` — MR Pipeline Gate Active
 
-Merge Request pipelines ensure that every PR — whether produced by a human or an AI agent — passes automated tests before merge. Without this control, AI agents can merge untested code autonomously.
+Merge Request pipelines ensure that every PR - whether produced by a human or an AI agent - passes automated tests before merge. Without this control, AI agents can merge untested code autonomously.
 
 - **Severity:** `error` · **Scope:** `repository`
 - **Tags:** `ci-cd`, `compliance`, `ai-readiness`
@@ -155,7 +142,7 @@ Every repository must define `setup`, `test`, and `run` Makefile targets. These 
 
 - **Severity:** `error` · **Scope:** `repository`
 - **Tags:** `developer-experience`, `makefile`
-- **Violation:** Returns a checklist of missing targets with pass/fail status per target via `structuredDetail`.
+- **Detail:** Returns a checklist of missing targets with pass/fail status per target via `structuredDetail`.
 
 ### `cr-302` — DevContainer Configured
 
@@ -170,15 +157,7 @@ A `devcontainer.json` ensures that AI agents and human developers operate in the
 
 - **Severity:** `error` · **Scope:** `repository`
 - **Tags:** `developer-experience`, `ai-readiness`, `documentation`
-- **Why it matters:** Without `AGENTS.md`, every AI agent session starts without context — increasing the risk of incorrect architectural decisions and silent regressions.
-
-### `cr-401` — Docker Base Image Registry
-
-All Dockerfile production-stage base images must be pulled from the approved company registry. Images must not use unpinned tags (`latest`, `master`, `main`, `edge`).
-
-- **Severity:** `error` · **Scope:** `repository`
-- **Tags:** `security`, `docker`, `supply-chain`
-- **Details:** Only checks `isFinalStage=true` stages to avoid false positives on multi-stage build intermediaries.
+- **Why it matters:** Without `AGENTS.md`, every AI agent session starts without context - increasing the risk of incorrect architectural decisions and silent regressions.
 
 ### `cr-402` — Exposed Services: Deprecated Dependencies
 
@@ -186,7 +165,7 @@ Services that expose public API endpoints must not depend on packages with expli
 
 - **Severity:** `warning` · **Scope:** `service`
 - **Tags:** `security`, `dependencies`, `topology`
-- **Why topology matters:** This check is impossible with file-level linting. It requires knowing (a) which services expose HTTP APIs, and (b) which of their transitive dependencies have deprecated releases — two facts that live in completely different parts of the codebase.
+- **Why topology matters:** This check is impossible with file-level linting. It requires knowing (a) which services expose HTTP APIs, and (b) which of their transitive dependencies have deprecated releases - two facts that live in completely different parts of the codebase.
 
 ### `cr-403` — Exposed Services: Outdated Dependencies
 
@@ -222,33 +201,35 @@ Every repository must register in the Backstage Software Catalog via a `catalog-
 ## How It Works
 
 ```
-┌──────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  YAML Rule   │────▶│  CodeRadius CLI   │────▶│  Architecture │
-│  (this repo) │     │  radius policy    │     │  Graph (Memgraph)│
-└──────────────┘     └──────────────────┘     └───────────────┘
+┌──────────────┐     ┌──────────────────┐     ┌───────────────────┐
+│  YAML Rule   │────>│  CodeRadius CLI   │────>│  Architecture     │
+│  (this repo) │     │  radius policy    │     │  Graph (Memgraph) │
+└──────────────┘     └──────────────────┘     └───────────────────┘
                               │
                               ▼
                      ┌──────────────────┐
-                     │  Violations      │
-                     │  (per entity)    │
+                     │  Evaluations     │
+                     │  (pass + fail)   │
                      └──────────────────┘
 ```
 
 1. **Ingest** — `radius ingest` scans your repositories and builds the architecture graph in Memgraph.
 2. **Load** — The engine discovers all `.yaml` files under your configured rule directories (e.g., `rules/` and `custom-rules/`).
-3. **Evaluate** — Each rule's Cypher `query` runs against the graph. Every returned row is a **violation**.
-4. **Report** — Violations are surfaced in the CLI output, the dashboard, or CI pipeline checks.
+3. **Evaluate** — Each rule's Cypher `query` runs against the graph. Every returned row is an **evaluation** with a `pass` or `fail` status.
+4. **Report** — Evaluations are surfaced in the CLI output, the dashboard compliance tab, or CI pipeline checks.
 
-Zero rows returned = all entities are compliant. Each row = one violation.
+Each row returned = one evaluation. `status = 'pass'` = compliant, `status = 'fail'` = violation.
 
 ---
 
 ## Writing Custom Rules
 
+When writing company-specific policies, **avoid using numeric prefixes** (e.g. `cr-900`) to prevent ID collisions across teams. Instead, use a **semantic slug with a namespace**.
+
 Each rule is a YAML file with the following structure:
 
 ```yaml
-id: cr-301-my-rule
+id: acme/require-readme
 name: My custom rule
 description: >
   Human-readable explanation of what this rule checks
@@ -261,12 +242,15 @@ tags:
 
 query: |
   MATCH (r:Repository)
-  WHERE ...
+  OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
+    WHERE sf.path = 'README.md'
+  WITH r, sf
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'Description of the violation' AS detail
+    CASE WHEN sf IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN sf IS NULL THEN 'README.md missing' ELSE '' END AS detail
 ```
 
 ### Query Contract
@@ -275,31 +259,32 @@ Every rule's Cypher query **must** return rows with these columns:
 
 | Column | Required | Description |
 |--------|----------|-------------|
-| `entityId` | ✅ | Unique ID of the non-compliant entity |
+| `entityId` | ✅ | Unique ID of the evaluated entity |
 | `entityName` | ✅ | Display name |
 | `entityType` | ✅ | Must match `scope`: `repository`, `service`, or `package` |
-| `detail` | ✅ | Human-readable explanation of the violation |
+| `status` | ✅ | `'pass'` (compliant) or `'fail'` (violation) |
+| `detail` | ✅ | Human-readable explanation (required for `fail`, may be empty for `pass`) |
 | `structuredDetail` | ❌ | Optional structured payload for rich dashboard rendering |
 
 ### YAML Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | ✅ | Unique rule identifier (e.g. `cr-301-makefile-targets`) |
+| `id` | ✅ | Unique rule identifier (e.g. `cr-301-makefile-targets` or `acme/require-readme`) |
 | `name` | ✅ | Short human-readable name |
 | `description` | ✅ | Full explanation of what the rule checks and why |
 | `severity` | ✅ | `error`, `warning`, or `info` |
 | `scope` | ✅ | `repository`, `service`, or `package` |
 | `tags` | ❌ | Categorization labels for filtering |
-| `failFast` | ❌ | If `true`, stop evaluation on first violation (default: `false`) |
-| `query` | ✅ | Cypher query that returns violations |
+| `failFast` | ❌ | If `true`, stop evaluation on first failure (default: `false`) |
+| `query` | ✅ | Cypher query that returns evaluations (pass + fail) |
 
 ### Tips
 
 - **Test in Memgraph Lab first.** Write and debug your Cypher query interactively before wrapping it in YAML.
-- **Filter aggressively.** Only return non-compliant entities — zero rows means compliant.
+- **Return all in-scope entities.** Use `CASE WHEN ... THEN 'fail' ELSE 'pass' END AS status` — do not filter out compliant entities.
 - **Use `structuredDetail` for multi-item checks.** Return a `{ checks, found }` map for rich checklist rendering.
-- **Use `UNION` for OR-logic.** Some rules (e.g. `cr-103`) use `UNION` to cover both "misconfigured pipeline" and "no pipeline at all" cases.
+- **Include the `found` array.** If your rule checks for expected items, also return the actual items found. This enables fuzzy matching in the UI.
 
 ---
 
@@ -322,12 +307,12 @@ query: |
   OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
     WHERE sf.path = 'README.md'
   WITH r, sf
-  WHERE sf IS NULL
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'README.md missing' AS detail
+    CASE WHEN sf IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN sf IS NULL THEN 'README.md missing' ELSE '' END AS detail
 ```
 
 ### Example 2: Services using more than N external dependencies
@@ -343,15 +328,18 @@ scope: service
 tags: [architecture, dependencies]
 
 query: |
-  MATCH (s:Service)-[:DEPENDS_ON]->(p:Package)
+  MATCH (s:Service)
+  OPTIONAL MATCH (s)-[:DEPENDS_ON]->(p:Package)
   WHERE p.isInternal = false
   WITH s, count(p) AS depCount
-  WHERE depCount > 50
   RETURN
     s.id      AS entityId,
     s.name    AS entityName,
     'service' AS entityType,
-    'Service has ' + toString(depCount) + ' external dependencies (threshold: 50)' AS detail
+    CASE WHEN depCount > 50 THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN depCount > 50
+      THEN 'Service has ' + toString(depCount) + ' external dependencies (threshold: 50)'
+      ELSE '' END AS detail
 ```
 
 ### Example 3: Topology-aware — unprotected database access
@@ -368,12 +356,15 @@ tags: [architecture, topology, security]
 
 query: |
   MATCH (s:Service)-[:EXPOSES_API]->(:APIInterface)
-  MATCH (s)-[:CONNECTS_TO]->(db:Database)
+  OPTIONAL MATCH (s)-[:CONNECTS_TO]->(db:Database)
   RETURN
     s.id      AS entityId,
     s.name    AS entityName,
     'service' AS entityType,
-    'Public API service directly connects to ' + db.name + ' — consider using a data service layer' AS detail
+    CASE WHEN db IS NOT NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN db IS NOT NULL
+      THEN 'Public API service directly connects to ' + db.name + ' - consider using a data service layer'
+      ELSE '' END AS detail
 ```
 
 ---

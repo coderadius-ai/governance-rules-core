@@ -20,9 +20,9 @@ query: |
   OPTIONAL MATCH (svc:Service)-[:STORED_IN]->(r)
   OPTIONAL MATCH (svc)-[:DEFINES]->(ci2:CIPipeline)
   WITH r, count(ci1) + count(ci2) AS ciFiles
-  WHERE ciFiles = 0
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'No CI/CD configuration file found. Add a pipeline configuration.' AS detail
+    CASE WHEN ciFiles = 0 THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN ciFiles = 0 THEN 'No CI/CD configuration file found. Add a pipeline configuration.' ELSE '' END AS detail

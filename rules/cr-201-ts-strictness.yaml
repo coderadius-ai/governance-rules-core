@@ -19,46 +19,49 @@ tags:
   - typescript
 
 query: |
-  // Find ALL non-compliant ToolConfig nodes regardless of whether they are
-  // owned by a Repository directly or by a Service within a monorepo.
+  // Find ALL repositories that have at least one TypeScript ToolConfig
   MATCH (tc:ToolConfig)
   WHERE tc.tool = 'TypeScript'
-    AND (
-      tc.resolvedStrict <> true
-      OR tc.resolvedNoFallthroughCasesInSwitch <> true
-      OR tc.resolvedNoUncheckedIndexedAccess <> true
-    )
-
+  
   // Path 1: ToolConfig is directly owned by a Repository
   OPTIONAL MATCH (r1:Repository)-[:HAS_TOOL_CONFIG]->(tc)
-
+  
   // Path 2: ToolConfig is owned by a Service (monorepo per-app tsconfig)
-  // Navigate Service → STORED_IN → Repository to get the parent repo for grouping
   OPTIONAL MATCH (svc:Service)-[:HAS_TOOL_CONFIG]->(tc)
   OPTIONAL MATCH (svc)-[:STORED_IN]->(r2:Repository)
-
-  // Resolve to effective repository — direct ownership wins, service-mediated is fallback
+  
   WITH tc, coalesce(r1, r2) AS repo
   WHERE repo IS NOT NULL
-
-  // Aggregate all non-compliant tsconfigs per repository
-  WITH repo, collect({
-    file:        tc.name,
-    strict:      tc.resolvedStrict,
-    noFall:      tc.resolvedNoFallthroughCasesInSwitch,
-    noUnchecked: tc.resolvedNoUncheckedIndexedAccess,
-    source:      tc.strictSource
-  }) AS violations
-
+  
+  // Check compliance per tsconfig
+  WITH repo, tc,
+    CASE WHEN tc.resolvedStrict <> true
+           OR tc.resolvedNoFallthroughCasesInSwitch <> true
+           OR tc.resolvedNoUncheckedIndexedAccess <> true
+         THEN true ELSE false END AS isNonCompliant
+  
+  // Aggregate per repository
+  WITH repo,
+    collect(CASE WHEN isNonCompliant THEN {
+      file:        tc.name,
+      strict:      tc.resolvedStrict,
+      noFall:      tc.resolvedNoFallthroughCasesInSwitch,
+      noUnchecked: tc.resolvedNoUncheckedIndexedAccess,
+      source:      tc.strictSource
+    } ELSE null END) AS rawViolations
+  WITH repo, [v IN rawViolations WHERE v IS NOT NULL] AS violations
+  
   RETURN
     repo.id         AS entityId,
     repo.name       AS entityName,
     'repository'    AS entityType,
-    'tsconfig non-compliant: ' + reduce(a = '', v IN violations |
+    CASE WHEN size(violations) = 0 THEN 'pass' ELSE 'fail' END AS status,
+    CASE WHEN size(violations) = 0 THEN ''
+    ELSE 'tsconfig non-compliant: ' + reduce(a = '', v IN violations |
       a + v.file +
       CASE WHEN v.strict <> true THEN ' [strict=false]' ELSE '' END +
       CASE WHEN v.noFall <> true THEN ' [noFallthroughCasesInSwitch=false]' ELSE '' END +
       CASE WHEN v.noUnchecked <> true THEN ' [noUncheckedIndexedAccess=false]' ELSE '' END +
       CASE WHEN v.source = 'inherited' THEN ' (inherited)' ELSE '' END +
       '; '
-    ) AS detail
+    ) END AS detail

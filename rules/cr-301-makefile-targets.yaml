@@ -28,10 +28,10 @@ query: |
          status: CASE WHEN x IN targets THEN 'pass' ELSE 'fail' END
        }] AS checks,
        [x IN ['setup', 'test', 'run'] WHERE NOT x IN targets] AS missingTargets
-  WHERE size(missingTargets) > 0
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'Missing mandatory Makefile targets: ' + reduce(a = '', x IN missingTargets | a + x + ' ') AS detail,
+    CASE WHEN size(missingTargets) = 0 THEN 'pass' ELSE 'fail' END AS status,
+    CASE WHEN size(missingTargets) = 0 THEN '' ELSE 'Missing mandatory Makefile targets: ' + reduce(a = '', x IN missingTargets | a + x + ' ') END AS detail,
     { checks: checks, found: targets } AS structuredDetail

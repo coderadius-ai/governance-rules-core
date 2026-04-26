@@ -1,37 +1,35 @@
 id: cr-103-mr-pipeline
 name: CI pipeline active on Merge Requests
 description: >
-  Merge Request pipelines ensure that every Pull/Merge Request — whether
-  produced by a human developer or an AI agent — passes automated tests
+  Merge Request pipelines ensure that every Pull/Merge Request - whether
+  produced by a human developer or an AI agent - passes automated tests
   before merge. Without this control, AI agents can merge untested code
   into main autonomously, propagating regressions silently.
 severity: error
 scope: repository
 tags: [ci-cd, compliance, ai-readiness]
 query: |
-  // Part 1: Pipeline exists (on repo or service) but MR pipeline not configured
-  MATCH (p:CIPipeline)
-  WHERE p.hasMergeRequestPipeline = false
-  OPTIONAL MATCH (r1:Repository)-[:HAS_CI_PIPELINE]->(p)
-  OPTIONAL MATCH (svc:Service)-[:HAS_CI_PIPELINE]->(p)
-  OPTIONAL MATCH (svc)-[:STORED_IN]->(r2:Repository)
-  WITH p, coalesce(r1, r2) AS repo
-  WHERE repo IS NOT NULL
-  RETURN DISTINCT
-    repo.id      AS entityId,
-    repo.name    AS entityName,
-    'repository' AS entityType,
-    ('CI pipeline detected (' + p.tool + ') but NOT configured for MRs — AI agents can push without automated gate') AS detail
-  UNION
-  // Part 2: No CI pipeline at all (neither on repo nor on any service)
   MATCH (r:Repository)
-  WHERE NOT (r)-[:HAS_CI_PIPELINE]->(:CIPipeline)
+  // Path 1: CI config directly on the Repository
+  OPTIONAL MATCH (r)-[:HAS_CI_PIPELINE]->(p1:CIPipeline)
+  // Path 2: CI config on a Service within the Repository (monorepo)
   OPTIONAL MATCH (svc:Service)-[:STORED_IN]->(r)
-  OPTIONAL MATCH (svc)-[:HAS_CI_PIPELINE]->(sp:CIPipeline)
-  WITH r, count(sp) AS svcPipes
-  WHERE svcPipes = 0
+  OPTIONAL MATCH (svc)-[:HAS_CI_PIPELINE]->(p2:CIPipeline)
+  WITH r, collect(DISTINCT p1) + collect(DISTINCT p2) AS allPipelines
+  WITH r,
+    size(allPipelines) AS pipelineCount,
+    size([p IN allPipelines WHERE p.hasMergeRequestPipeline = true]) AS mrPipelineCount
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'No CI pipeline detected — no automated gate on MRs' AS detail
+    CASE
+      WHEN pipelineCount = 0 THEN 'fail'
+      WHEN mrPipelineCount > 0 THEN 'pass'
+      ELSE 'fail'
+    END AS status,
+    CASE
+      WHEN pipelineCount = 0 THEN 'No CI pipeline detected - no automated gate on MRs'
+      WHEN mrPipelineCount > 0 THEN ''
+      ELSE 'CI pipeline detected but NOT configured for MRs - AI agents can push without automated gate'
+    END AS detail

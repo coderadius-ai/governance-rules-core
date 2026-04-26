@@ -18,9 +18,9 @@ query: |
       '.github/renovate.json'
     ]
   WITH r, sf
-  WHERE sf IS NULL
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'renovate.json missing — dependencies are not automatically updated' AS detail
+    CASE WHEN sf IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN sf IS NULL THEN 'renovate.json missing - dependencies are not automatically updated' ELSE '' END AS detail

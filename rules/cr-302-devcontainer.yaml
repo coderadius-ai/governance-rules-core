@@ -13,9 +13,9 @@ query: |
   OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
     WHERE sf.path IN ['.devcontainer/devcontainer.json', '.devcontainer.json']
   WITH r, sf
-  WHERE sf IS NULL
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'devcontainer.json missing — development environment not standardized for AI agents' AS detail
+    CASE WHEN sf IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN sf IS NULL THEN 'devcontainer.json missing - development environment not standardized for AI agents' ELSE '' END AS detail

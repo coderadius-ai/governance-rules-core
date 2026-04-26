@@ -12,9 +12,9 @@ query: |
   OPTIONAL MATCH (r)-[:HAS_CONFIG]->(sf:StructuralFile)
     WHERE sf.path IN ['catalog-info.yaml', 'catalog.yaml', 'catalog-info.yml', 'catalog.yml']
   WITH r, sf
-  WHERE sf IS NULL
   RETURN
     r.id         AS entityId,
     r.name       AS entityName,
     'repository' AS entityType,
-    'catalog-info.yaml missing — service is not registered in the Backstage Software Catalog' AS detail
+    CASE WHEN sf IS NULL THEN 'fail' ELSE 'pass' END AS status,
+    CASE WHEN sf IS NULL THEN 'catalog-info.yaml missing - service is not registered in the Backstage Software Catalog' ELSE '' END AS detail
